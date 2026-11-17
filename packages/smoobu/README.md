@@ -6,8 +6,8 @@ Typed TypeScript client for the [Smoobu API](https://docs.smoobu.com/).
   nonce on every retry.
 - **Validated responses** (zod). Smoobu's documentation and its real payloads differ, and the
   schemas accept the real ones.
-- **Clean domain model**: `Message`, `ConversationSummary`, and one page envelope everywhere
-  (`items/page/pageSize/pageCount/total`).
+- **Clean domain model**: `Property`, `Reservation`, `Guest`, `Message`, `ConversationSummary`,
+  and one page envelope everywhere (`items/page/pageSize/pageCount/total`).
 - **Robust transport**: timeouts, and retries on 429/5xx/network errors for GET requests only.
   Rate-limit waits follow Smoobu's reset time.
 - **Typed errors**: `SmoobuApiError` carries `status`, `code`
@@ -21,7 +21,7 @@ npm install @skilder-ai/smoobu zod
 ```
 
 ```ts
-import { Smoobu, SmoobuApiError } from '@skilder-ai/smoobu';
+import { paginate, Smoobu, SmoobuApiError } from '@skilder-ai/smoobu';
 
 const smoobu = new Smoobu({
   apiKey: process.env.SMOOBU_API_KEY!,
@@ -29,6 +29,17 @@ const smoobu = new Smoobu({
 });
 
 const account = await smoobu.getAccount();
+
+const properties = await smoobu.properties.list(); // [{ id, name }]
+const chalet = await smoobu.properties.get(properties[0].id); // location, timeZone, capacity…
+const staying = await smoobu.reservations.list({ stayFrom: '2026-12-24', stayTo: '2026-12-24' });
+const booking = await smoobu.reservations.get(123456789); // status, stay, guest, notes, payment
+const guest = await smoobu.guests.get(booking.guest.id!); // needs "Guest Data (PII)"
+
+for await (const r of paginate((page) => smoobu.reservations.list({ page, pageSize: 100 }))) {
+  /* every reservation */
+}
+
 const conversations = await smoobu.messages.listConversations({ pageSize: 20 });
 const thread = await smoobu.messages.list(123456789);
 await smoobu.messages.send({ reservationId: 123456789, body: 'Welcome!', audience: 'guest' });
@@ -56,3 +67,9 @@ endpoint and returns raw `wire` types.
 - Without the key's **"Guest Data (PII)"** permission, guest names and message bodies come back as
   empty strings.
 - Sending returns no message id.
+- Reservation filters: `from`/`to` select stays overlapping the range; `arrivalFrom` and
+  `modifiedFrom` are camelCase but `created_from` is snake_case. A `pageSize` above 100 silently
+  falls back to 25, so the client rejects it.
+- Bookings mix hyphenated keys (`guest-name`), `"Yes"`/`"No"` strings and minute-precision dates.
+  `Reservation` normalises them, and derives `status` (`confirmed | modified | cancelled | blocked`).
+- `/api/guests` answers 403 without the "Guest Data (PII)" permission.

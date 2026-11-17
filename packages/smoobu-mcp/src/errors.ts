@@ -4,7 +4,8 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 const HINTS: Record<SmoobuApiError['code'], string> = {
   unauthorized:
     'Smoobu rejected the credentials. Check that SMOOBU_API_KEY and SMOOBU_API_SECRET belong to the same HMAC key, that the key is not revoked, and that the server clock is correct (±5 minutes).',
-  forbidden: 'The API key is not allowed to do this. Check its permissions in Smoobu.',
+  forbidden:
+    'The API key is not allowed to do this. Guest records (and guest-name search) need the "Guest Data (PII)" permission on the key (Smoobu → Settings → Advanced → API Keys).',
   not_found: 'Not found: the id does not exist or is not visible to this API key.',
   validation: 'Smoobu rejected the input. Fix the arguments and try again.',
   rate_limited: 'Smoobu rate limit reached (700 requests/minute). Wait before retrying.',
