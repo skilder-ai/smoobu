@@ -1,6 +1,6 @@
 {
   "name": "@skilder-ai/smoobu-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for Smoobu: read guest conversations and send messages (HMAC auth).",
   "license": "MIT",
   "type": "module",
