@@ -1,6 +1,6 @@
 {
   "name": "@skilder-ai/smoobu",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Typed Smoobu API client (HMAC-signed requests, validated responses, clean domain model).",
   "license": "MIT",
   "type": "module",
