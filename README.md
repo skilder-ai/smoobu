@@ -7,7 +7,7 @@
 
 ## Develop
 
-Node 24 for development (`.nvmrc`); the packages support Node 20 and later. pnpm 10.
+Node 24 for development (`.nvmrc`); the packages support Node 22 and later (Node 20 is end-of-life). pnpm 10.
 
 ```sh
 pnpm install

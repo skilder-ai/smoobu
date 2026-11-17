@@ -14,7 +14,7 @@ Typed TypeScript client for the [Smoobu API](https://docs.smoobu.com/).
   (`unauthorized | forbidden | not_found | validation | rate_limited | upstream | network`) and
   `retryable`.
 
-Requires Node ≥ 20 and `zod` 4 (peer dependency).
+Requires Node ≥ 22 and `zod` 4 (peer dependency).
 
 ```sh
 npm install @skilder-ai/smoobu zod

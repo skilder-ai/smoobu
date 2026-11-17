@@ -18,7 +18,7 @@
     "guest-messaging"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "smoobu-mcp": "./dist/index.js"
