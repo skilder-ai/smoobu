@@ -37,7 +37,7 @@ exist. A member of the `@skilder-ai` npm org therefore publishes 0.1.0 once from
 ```sh
 pnpm version-packages
 npm login
-NPM_CONFIG_PROVENANCE=false pnpm release
+pnpm release
 ```
 
 Then, on npmjs.com, open each package's Settings → Trusted publishing. Add GitHub Actions with

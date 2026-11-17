@@ -36,3 +36,6 @@ jobs:
           title: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Provenance is enabled here, not in package.json publishConfig: publishConfig would
+          # override any local opt-out and make publishing outside CI impossible.
+          NPM_CONFIG_PROVENANCE: 'true'
