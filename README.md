@@ -31,17 +31,12 @@ Releases use [Changesets](https://github.com/changesets/changesets):
 3. Merging that PR publishes to npm using **trusted publishing** (GitHub OIDC). No npm token is
    stored, and provenance is attached automatically.
 
-**First publish (one-off).** npm can only set up trusted publishing on packages that already
-exist. A member of the `@skilder-ai` npm org therefore publishes 0.1.0 once from a clean checkout:
-
-```sh
-pnpm version-packages
-npm login
-pnpm release
-```
-
-Then, on npmjs.com, open each package's Settings → Trusted publishing. Add GitHub Actions with
-repository `skilder-ai/smoobu` and workflow `release.yml`. Every later release goes through CI.
+**Setting up a new package.** Configure trusted publishing on npmjs.com _before_ its first
+release: package Settings → Trusted publishing → GitHub Actions, repository `skilder-ai/smoobu`,
+workflow `release.yml`, environment empty, **Allow `npm publish`** ticked. For a package that does
+not exist yet, npm creates a `0.0.0-stage` placeholder version; deprecate it after the first real
+release. Do not publish from a laptop: those versions get no provenance, and CI then has nothing
+left to publish, which leaves the trusted-publishing setup unvalidated.
 
 ## License
 
