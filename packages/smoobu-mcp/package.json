@@ -1,0 +1,50 @@
+{
+  "name": "@skilder-ai/smoobu-mcp",
+  "version": "0.0.0",
+  "description": "MCP server for Smoobu: read guest conversations and send messages (HMAC auth).",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skilder-ai/smoobu.git",
+    "directory": "packages/smoobu-mcp"
+  },
+  "homepage": "https://github.com/skilder-ai/smoobu/tree/main/packages/smoobu-mcp#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "smoobu",
+    "vacation-rental",
+    "guest-messaging"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "smoobu-mcp": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "inspect": "pnpm build && npx -y @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@skilder-ai/smoobu": "workspace:^",
+    "zod": "^4.6.7"
+  }
+}

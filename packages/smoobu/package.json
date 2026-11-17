@@ -1,0 +1,56 @@
+{
+  "name": "@skilder-ai/smoobu",
+  "version": "0.0.0",
+  "description": "Typed Smoobu API client (HMAC-signed requests, validated responses, clean domain model).",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skilder-ai/smoobu.git",
+    "directory": "packages/smoobu"
+  },
+  "homepage": "https://github.com/skilder-ai/smoobu/tree/main/packages/smoobu#readme",
+  "keywords": [
+    "smoobu",
+    "channel-manager",
+    "vacation-rental",
+    "api-client"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "@skilder-ai/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "zod": "^4.6.7"
+  }
+}
