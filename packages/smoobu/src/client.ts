@@ -1,13 +1,47 @@
 import type { z } from 'zod';
 import { canonicalQuery, signRequest, type Query } from './auth';
 import {
+  smoobuApartmentListSchema,
+  smoobuApartmentSchema,
+  smoobuBookingSchema,
+  smoobuBookingsPageSchema,
   smoobuErrorSchema,
+  smoobuGuestSchema,
+  smoobuGuestsPageSchema,
   smoobuMessagesPageSchema,
   smoobuThreadsPageSchema,
   smoobuUserSchema,
   type SmoobuErrorBody,
   type SmoobuSendMessageBody,
 } from './wire';
+
+/** Query parameters of GET /api/reservations, named as Smoobu expects them (camelCase works). */
+export interface SmoobuReservationQuery {
+  page?: number;
+  pageSize?: number;
+  apartmentId?: number;
+  /** Stays overlapping [from, to]. */
+  from?: string;
+  to?: string;
+  arrivalFrom?: string;
+  arrivalTo?: string;
+  departureFrom?: string;
+  departureTo?: string;
+  created_from?: string;
+  created_to?: string;
+  modifiedFrom?: string;
+  modifiedTo?: string;
+  showCancellation?: boolean;
+  excludeBlocked?: boolean;
+  includeRelated?: boolean;
+}
+
+/** Smoobu's paged list endpoints cap pageSize at 100 and silently ignore larger values. */
+function assertPageSize(pageSize: number | undefined) {
+  if (pageSize !== undefined && (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)) {
+    throw new RangeError('pageSize must be an integer between 1 and 100');
+  }
+}
 
 export interface SmoobuClientOptions {
   apiKey: string;
@@ -128,6 +162,46 @@ export class SmoobuClient {
       query: { page: params.page, onlyRelatedToGuest: params.onlyRelatedToGuest },
       schema: smoobuMessagesPageSchema,
     });
+  }
+
+  /** GET /api/apartments: ids and names only (no pagination). */
+  listApartments() {
+    return this.request('GET', '/api/apartments', { schema: smoobuApartmentListSchema });
+  }
+
+  /** GET /api/apartments/{id}: location, rooms, amenities, currency, price range. */
+  getApartment(apartmentId: number) {
+    return this.request('GET', `/api/apartments/${apartmentId}`, { schema: smoobuApartmentSchema });
+  }
+
+  /**
+   * GET /api/reservations. Dates are `YYYY-MM-DD`; `from`/`to` select stays overlapping the range.
+   * Smoobu silently falls back to 25 for a `pageSize` above 100, so that is rejected here.
+   */
+  listReservations(params: SmoobuReservationQuery = {}) {
+    assertPageSize(params.pageSize);
+    return this.request('GET', '/api/reservations', {
+      query: { ...params },
+      schema: smoobuBookingsPageSchema,
+    });
+  }
+
+  /** GET /api/reservations/{id} (adds firstname, lastname, assistant-notice, price-details…). */
+  getReservation(reservationId: number) {
+    return this.request('GET', `/api/reservations/${reservationId}`, {
+      schema: smoobuBookingSchema,
+    });
+  }
+
+  /** GET /api/guests. Needs the "Guest Data (PII)" key permission (403 otherwise). */
+  listGuests(params: { page?: number; pageSize?: number; query?: string } = {}) {
+    assertPageSize(params.pageSize);
+    return this.request('GET', '/api/guests', { query: params, schema: smoobuGuestsPageSchema });
+  }
+
+  /** GET /api/guests/{id}. Needs the "Guest Data (PII)" key permission (403 otherwise). */
+  getGuest(guestId: number) {
+    return this.request('GET', `/api/guests/${guestId}`, { schema: smoobuGuestSchema });
   }
 
   /** POST /api/reservations/{id}/messages/send-message-to-guest (no message id is returned). */

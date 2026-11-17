@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { htmlToText } from '../src/html';
 import { toLocalDateTime } from '../src/mappers';
-import { Smoobu } from '../src/smoobu';
+import { paginate, Smoobu } from '../src/smoobu';
+import { propertySchema, reservationSchema } from '../src/types';
+import { apartment, booking, bookingsPage, guest } from './fixtures';
 import { fakeFetch, json, makeClient } from './helpers';
 
 describe('mappers', () => {
@@ -133,5 +135,110 @@ describe('Smoobu.messages', () => {
     });
     expect(String(f.mock.calls[0]![0])).toMatch(/send-message-to-guest$/);
     expect(f.mock.calls[0]![1]?.body).toBe('{"messageBody":"hello","subject":"Welcome"}');
+  });
+});
+
+describe('Smoobu.properties', () => {
+  it('maps apartment details, coercing numbers', async () => {
+    const f = fakeFetch(json(apartment()));
+    const p = await new Smoobu(makeClient(f)).properties.get(10);
+    expect(p).toMatchObject({
+      id: 10,
+      name: 'Chalet Alpha',
+      type: 'Holiday rental',
+      location: { city: 'Leysin', latitude: 46.34, longitude: 7.01 },
+      timeZone: 'Europe/Zurich',
+      capacity: { maxGuests: 4, bedrooms: 2, beds: { double: 2, single: null } },
+      amenities: ['Wifi', 'Fireplace'],
+      priceRange: { min: 150, max: 320 },
+    });
+    expect(propertySchema.safeParse(p).success).toBe(true);
+  });
+
+  it('accepts the documented `equipments` spelling', async () => {
+    const f = fakeFetch(json(apartment({ amenities: undefined, equipments: ['Sauna'] })));
+    expect((await new Smoobu(makeClient(f)).properties.get(10)).amenities).toEqual(['Sauna']);
+  });
+});
+
+describe('Smoobu.reservations', () => {
+  it('maps bookings and translates filters to Smoobu parameter names', async () => {
+    const f = fakeFetch(
+      json(
+        bookingsPage([
+          booking(),
+          booking({ id: 101, type: 'cancellation' }),
+          booking({ id: 102, 'is-blocked-booking': true, 'guest-name': '' }),
+        ]),
+      ),
+    );
+    const page = await new Smoobu(makeClient(f)).reservations.list({
+      propertyId: 10,
+      stayFrom: '2026-12-01',
+      createdFrom: '2026-10-01',
+      includeCancelled: true,
+      includeBlocked: false,
+      pageSize: 50,
+    });
+    const url = new URL(String(f.mock.calls[0]![0]));
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      apartmentId: '10',
+      from: '2026-12-01',
+      created_from: '2026-10-01',
+      showCancellation: 'true',
+      excludeBlocked: 'true',
+      pageSize: '50',
+    });
+    expect(page.items.map((r) => r.status)).toEqual(['confirmed', 'cancelled', 'blocked']);
+    const r = page.items[0]!;
+    expect(r).toMatchObject({
+      reference: 'HMABC123',
+      property: { id: 10, name: 'Chalet Alpha' },
+      channel: { typeId: 74, name: 'Airbnb' },
+      stay: { nights: 7, checkInTime: '16:00', adults: 2, children: 1 },
+      guest: { id: 77, name: 'Anna Muster', language: 'fr' },
+      notes: { guest: null, assistant: 'Late arrival' },
+      payment: { total: 1200, paid: true, prepaymentPaid: false, channelCommission: 150.5 },
+      createdAt: '2026-10-18T20:27:00',
+      modifiedAt: '2026-10-18T20:27:49',
+    });
+    expect(reservationSchema.safeParse(r).success).toBe(true);
+    expect(page.items[2]!.guest.name).toBeNull();
+  });
+
+  it('rejects page sizes Smoobu would silently ignore', async () => {
+    const f = fakeFetch();
+    await expect(
+      new Smoobu(makeClient(f)).reservations.list({ pageSize: 200 }),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it('paginates lazily', async () => {
+    const f = fakeFetch(
+      json(bookingsPage([booking({ id: 1 })], 1, 2)),
+      json(bookingsPage([booking({ id: 2 })], 2, 2)),
+    );
+    const smoobu = new Smoobu(makeClient(f));
+    const ids: number[] = [];
+    for await (const r of paginate((page) => smoobu.reservations.list({ page }))) ids.push(r.id);
+    expect(ids).toEqual([1, 2]);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Smoobu.guests', () => {
+  it('maps the guest record and its reservations', async () => {
+    const f = fakeFetch(json(guest()));
+    const g = await new Smoobu(makeClient(f)).guests.get(77);
+    expect(g).toMatchObject({
+      id: 77,
+      companyName: null,
+      emails: ['anna@example.com'],
+      phones: ['+41 00 000 00 00'],
+      address: null,
+      notes: 'Prefers French',
+      reservations: [{ id: 100 }],
+    });
   });
 });

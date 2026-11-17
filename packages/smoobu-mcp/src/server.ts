@@ -1,15 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import {
-  conversationPageSchema,
-  messageAudienceSchema,
-  messageDirectionSchema,
-  Smoobu,
-  type SmoobuClientOptions,
-} from '@skilder-ai/smoobu';
+import { Smoobu, type SmoobuClientOptions } from '@skilder-ai/smoobu';
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import { errorResult, makeRedactor } from './errors';
+import type { Runner, ToolContext } from './tools/context';
+import { registerMessageTools } from './tools/messages';
+import { PropertyDirectory, registerPropertyTools } from './tools/properties';
+import { registerReservationTools } from './tools/reservations';
 
 export const SERVER_NAME = 'smoobu-mcp';
 export const SERVER_VERSION: string = pkg.version;
@@ -18,8 +16,6 @@ export interface ServerOptions extends Omit<SmoobuClientOptions, 'userAgent'> {
   /** Registers smoobu_send_message. Off by default: sending reaches real guests. */
   allowWrites?: boolean;
 }
-
-const DEFAULT_MAX_CHARS = 2000;
 
 const connectionSchema = z.object({
   connected: z.literal(true),
@@ -33,36 +29,6 @@ const connectionSchema = z.object({
   writesEnabled: z.boolean(),
   serverVersion: z.string(),
 });
-
-const toolMessageSchema = z.object({
-  id: z.number(),
-  direction: messageDirectionSchema,
-  sentAt: z.string().nullable(),
-  subject: z.string().nullable(),
-  text: z.string(),
-  truncated: z.boolean(),
-  html: z.string().nullable().optional(),
-});
-
-const messageListSchema = z.object({
-  reservationId: z.number(),
-  items: z.array(toolMessageSchema),
-  page: z.number(),
-  pageSize: z.number(),
-  pageCount: z.number(),
-  total: z.number(),
-  hint: z.string().optional(),
-});
-
-const sendResultSchema = z.object({
-  accepted: z.literal(true),
-  reservationId: z.number(),
-  audience: messageAudienceSchema,
-  note: z.string(),
-});
-
-const PII_HINT =
-  'All message bodies are empty. The Smoobu API key most likely lacks the "Guest Data (PII)" permission (Smoobu → Settings → Advanced → API Keys).';
 
 /**
  * Builds the MCP server (transport-agnostic). `index.ts` connects it to stdio; embedders can
@@ -84,16 +50,18 @@ export function createServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       instructions:
-        'Smoobu is a vacation-rental channel manager. Conversations are keyed by reservationId. ' +
-        'Typical flow: smoobu_list_conversations → smoobu_list_messages(reservationId) → ' +
+        'Smoobu is a vacation-rental channel manager. Properties ("apartments") host reservations; ' +
+        'each reservation has one guest conversation, keyed by reservationId. ' +
+        'Find a booking with smoobu_find_reservations or smoobu_list_conversations, read it with ' +
+        'smoobu_read_conversation, and get guest and stay details with smoobu_get_reservation. ' +
         (allowWrites
-          ? 'smoobu_send_message (always confirm the exact text with the user before sending to a guest).'
-          : 'replying is disabled on this server (SMOOBU_ALLOW_WRITES is off).'),
+          ? 'Reply with smoobu_send_message, in the guest language, after confirming the exact text with the user.'
+          : 'Replying is disabled on this server (SMOOBU_ALLOW_WRITES is off).'),
     },
   );
 
   /** Wraps a handler: structured + text output, typed errors, redaction. */
-  const run =
+  const run: Runner =
     <A, R extends Record<string, unknown>>(fn: (args: A) => Promise<R>) =>
     async (args: A): Promise<CallToolResult> => {
       try {
@@ -140,108 +108,16 @@ export function createServer(
     }),
   );
 
-  server.registerTool(
-    'smoobu_list_conversations',
-    {
-      title: 'List guest conversations',
-      description:
-        'Lists guest conversations (one per reservation or inquiry), most recent activity first, with a preview of the latest message and the total unread count. reservationId is null for inquiries without a booking; those cannot be opened with smoobu_list_messages.',
-      inputSchema: {
-        page: z.number().int().min(1).default(1).describe('1-based page number.'),
-        pageSize: z.number().int().min(1).max(100).default(20).describe('Conversations per page.'),
-        propertyIds: z
-          .array(z.number().int().positive())
-          .optional()
-          .describe('Only conversations for these Smoobu property (apartment) ids.'),
-      },
-      outputSchema: conversationPageSchema.shape,
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    },
-    run((args) => smoobu.messages.listConversations(args)),
-  );
-
-  server.registerTool(
-    'smoobu_list_messages',
-    {
-      title: 'Read a conversation',
-      description:
-        'Returns the messages of one reservation, oldest first, as plain text. inbound = from the guest, outbound = from the host or an automation. Smoobu pages by 25 messages.',
-      inputSchema: {
-        reservationId: z.number().int().positive().describe('Smoobu reservation (booking) id.'),
-        page: z.number().int().min(1).default(1).describe('1-based page number.'),
-        maxCharsPerMessage: z
-          .number()
-          .int()
-          .min(100)
-          .max(20_000)
-          .default(DEFAULT_MAX_CHARS)
-          .describe('Longer message texts are cut and flagged truncated: true.'),
-        includeHtml: z
-          .boolean()
-          .default(false)
-          .describe('Also return the raw HTML body (verbose; rarely needed).'),
-      },
-      outputSchema: messageListSchema.shape,
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    },
-    run(async ({ reservationId, page, maxCharsPerMessage, includeHtml }) => {
-      const res = await smoobu.messages.list(reservationId, { page });
-      const items = res.items.map((m) => ({
-        id: m.id,
-        direction: m.direction,
-        sentAt: m.sentAt,
-        subject: m.subject,
-        text: m.text.length > maxCharsPerMessage ? m.text.slice(0, maxCharsPerMessage) : m.text,
-        truncated: m.text.length > maxCharsPerMessage,
-        ...(includeHtml ? { html: m.html } : {}),
-      }));
-      const allEmpty = items.length > 0 && items.every((m) => !m.text && !m.subject);
-      return {
-        reservationId,
-        items,
-        page: res.page,
-        pageSize: res.pageSize,
-        pageCount: res.pageCount,
-        total: res.total,
-        ...(allEmpty ? { hint: PII_HINT } : {}),
-      };
-    }),
-  );
-
-  if (allowWrites) {
-    server.registerTool(
-      'smoobu_send_message',
-      {
-        title: 'Send a message',
-        description:
-          'Sends a message on a reservation. audience "guest" delivers it to the guest through their booking channel (Airbnb, Booking.com, email…) and cannot be undone: confirm the exact text with the user first. audience "internal" adds a host-only note hidden from the guest. Smoobu returns no message id; call smoobu_list_messages to see it.',
-        inputSchema: {
-          reservationId: z.number().int().positive().describe('Smoobu reservation (booking) id.'),
-          body: z.string().trim().min(1).max(10_000).describe('Message text (plain text or HTML).'),
-          subject: z.string().trim().max(255).optional().describe('Optional subject line.'),
-          audience: messageAudienceSchema
-            .default('guest')
-            .describe('guest = visible to the guest; internal = host-only note.'),
-        },
-        outputSchema: sendResultSchema.shape,
-        annotations: {
-          readOnlyHint: false,
-          destructiveHint: false,
-          idempotentHint: false,
-          openWorldHint: true,
-        },
-      },
-      run(async ({ reservationId, body, subject, audience }) => {
-        await smoobu.messages.send({ reservationId, body, subject, audience });
-        return {
-          accepted: true as const,
-          reservationId,
-          audience,
-          note: 'Accepted by Smoobu. Delivery to the booking channel happens asynchronously.',
-        };
-      }),
-    );
-  }
+  const ctx: ToolContext = {
+    server,
+    smoobu,
+    run,
+    properties: new PropertyDirectory(smoobu),
+    allowWrites,
+  };
+  registerPropertyTools(ctx);
+  registerReservationTools(ctx);
+  registerMessageTools(ctx);
 
   return server;
 }

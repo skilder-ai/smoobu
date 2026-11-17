@@ -92,3 +92,141 @@ export const smoobuNewMessageDataSchema = z.looseObject({
   sender: z.string().nullish(),
   booking: z.looseObject({ id: z.number() }),
 });
+
+// --- Apartments ----------------------------------------------------------------------------------
+
+/** Numbers that Smoobu sometimes sends as strings (prices, coordinates). */
+const numeric = z.union([z.number(), z.string()]).nullish();
+
+export const smoobuApartmentListSchema = z.looseObject({
+  apartments: z.array(z.looseObject({ id: z.number(), name: z.string().nullish() })),
+});
+export type SmoobuApartmentList = z.infer<typeof smoobuApartmentListSchema>;
+
+export const smoobuApartmentSchema = z.looseObject({
+  // Not in the docs, but present in real responses.
+  id: z.number().nullish(),
+  name: z.string().nullish(),
+  location: z
+    .looseObject({
+      street: z.string().nullish(),
+      zip: z.string().nullish(),
+      city: z.string().nullish(),
+      state: z.string().nullish(),
+      country: z.string().nullish(),
+      // Documented as strings, observed as numbers.
+      latitude: numeric,
+      longitude: numeric,
+    })
+    .nullish(),
+  timeZone: z.string().nullish(),
+  rooms: z.record(z.string(), z.number().nullable()).nullish(),
+  // The field table says `amenities` (observed), the docs' example says `equipments`.
+  amenities: z.array(z.string()).nullish(),
+  equipments: z.array(z.string()).nullish(),
+  currency: z.string().nullish(),
+  price: z.looseObject({ minimal: numeric, maximal: numeric }).nullish(),
+  type: z.looseObject({ id: z.number().nullish(), name: z.string().nullish() }).nullish(),
+});
+export type SmoobuApartment = z.infer<typeof smoobuApartmentSchema>;
+
+// --- Reservations --------------------------------------------------------------------------------
+
+/**
+ * A booking, as returned by GET /api/reservations(/{id}) and reservation webhooks. Hyphenated keys
+ * are Smoobu's. Without the key's "Guest Data (PII)" permission, guest fields are empty strings.
+ */
+export const smoobuBookingSchema = z.looseObject({
+  id: z.number(),
+  'reference-id': z.string().nullish(),
+  /** "reservation" | "modification of booking" | "cancellation". */
+  type: z.string().nullish(),
+  /** YYYY-MM-DD */
+  arrival: z.string(),
+  departure: z.string(),
+  /** "YYYY-MM-DD HH:MM" */
+  'created-at': z.string().nullish(),
+  /** "YYYY-MM-DD HH:MM:SS" */
+  modifiedAt: z.string().nullish(),
+  apartment: z.looseObject({ id: z.number().nullish(), name: z.string().nullish() }).nullish(),
+  channel: z
+    .looseObject({
+      /** The account's channel instance id. */
+      id: z.number().nullish(),
+      /** The channel type id (14 = Booking.com, 74 = Airbnb…). */
+      channel_id: z.number().nullish(),
+      name: z.string().nullish(),
+    })
+    .nullish(),
+  'guest-name': z.string().nullish(),
+  firstname: z.string().nullish(),
+  lastname: z.string().nullish(),
+  email: z.string().nullish(),
+  phone: z.string().nullish(),
+  adults: z.number().nullish(),
+  children: z.number().nullish(),
+  /** "HH:MM" */
+  'check-in': z.string().nullish(),
+  'check-out': z.string().nullish(),
+  notice: z.string().nullish(),
+  'assistant-notice': z.string().nullish(),
+  price: numeric,
+  'price-details': z.string().nullish(),
+  'city-tax': numeric,
+  /** "Yes" | "No" */
+  'price-paid': z.string().nullish(),
+  'commission-included': numeric,
+  prepayment: numeric,
+  'prepayment-paid': z.string().nullish(),
+  deposit: numeric,
+  'deposit-paid': z.string().nullish(),
+  language: z.string().nullish(),
+  'guest-app-url': z.string().nullish(),
+  'is-blocked-booking': z.boolean().nullish(),
+  guestId: z.number().nullish(),
+  related: z.array(z.looseObject({ id: z.number().nullish() })).nullish(),
+});
+export type SmoobuBooking = z.infer<typeof smoobuBookingSchema>;
+
+export const smoobuBookingsPageSchema = z.looseObject({
+  page_count: z.number(),
+  page_size: z.number(),
+  total_items: z.number(),
+  page: z.number(),
+  bookings: z.array(smoobuBookingSchema),
+});
+export type SmoobuBookingsPage = z.infer<typeof smoobuBookingsPageSchema>;
+
+// --- Guests --------------------------------------------------------------------------------------
+
+/** Contact entries are documented as arrays without an item shape: accept strings or objects. */
+const contactList = z.array(z.unknown()).nullish();
+
+export const smoobuGuestSchema = z.looseObject({
+  id: z.number(),
+  firstName: z.string().nullish(),
+  lastName: z.string().nullish(),
+  companyName: z.string().nullish(),
+  emails: contactList,
+  telephoneNumbers: contactList,
+  address: z
+    .looseObject({
+      street: z.string().nullish(),
+      postalCode: z.string().nullish(),
+      city: z.string().nullish(),
+      country: z.string().nullish(),
+    })
+    .nullish(),
+  notes: z.string().nullish(),
+  bookings: z.array(smoobuBookingSchema).nullish(),
+});
+export type SmoobuGuest = z.infer<typeof smoobuGuestSchema>;
+
+export const smoobuGuestsPageSchema = z.looseObject({
+  pageCount: z.number(),
+  pageSize: z.number(),
+  totalItems: z.number(),
+  page: z.number(),
+  guests: z.array(smoobuGuestSchema),
+});
+export type SmoobuGuestsPage = z.infer<typeof smoobuGuestsPageSchema>;

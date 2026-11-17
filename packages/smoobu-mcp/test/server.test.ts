@@ -72,8 +72,13 @@ describe('tools', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'smoobu_check_connection',
+      'smoobu_find_reservations',
+      'smoobu_get_property',
+      'smoobu_get_reservation',
       'smoobu_list_conversations',
       'smoobu_list_messages',
+      'smoobu_list_properties',
+      'smoobu_read_conversation',
     ]);
     for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);
   });
